@@ -1,8 +1,10 @@
 import idc
-import idascript
 from idaapi import *
+from ida_ua import insn_t
 
 DWORD_SIZE = 8
+
+mycmd = insn_t()
 
 def buildsegmap():
 	segs = {}
@@ -20,23 +22,23 @@ def buildsegmap():
 		sname = get_segm_name(seg)
 		if seg.perm & SEGPERM_EXEC:
 			if sname == ".plt":
-				segs['plt'].append((sname, seg.startEA, seg.startEA + seg.size()))
+				segs['plt'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
 			elif sname == ".text":
-				segs['text'].append((sname, seg.startEA, seg.startEA + seg.size()))
-			segs['code'].append((sname, seg.startEA, seg.startEA + seg.size()))
+				segs['text'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
+			segs['code'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
 
 		elif seg.perm & SEGPERM_WRITE == 0 or sname == ".data.rel.ro" or sname == ".data.rel.ro.local":
 			if sname == ".eh_frame" or sname == ".eh_frame_hdr": continue
 			if sname == "extern":
-				segs['extern'].append((sname, seg.startEA, seg.startEA + seg.size()))
-			segs['rodata'].append((sname, seg.startEA, seg.startEA + seg.size()))
+				segs['extern'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
+			segs['rodata'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
 
 		elif seg.perm & SEGPERM_WRITE and not sname == ".data.rel.ro" and not sname == ".data.rel.ro.local":
 			if sname == ".got.plt":
-				segs['got_plt'].append((sname, seg.startEA, seg.startEA + seg.size()))
+				segs['got_plt'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
 			elif sname == ".got":
-				segs['got'].append((sname, seg.startEA, seg.startEA + seg.size()))
-			segs['wdata'].append((sname, seg.startEA, seg.startEA + seg.size()))  
+				segs['got'].append((sname, seg.start_ea, seg.start_ea + seg.size()))
+			segs['wdata'].append((sname, seg.start_ea, seg.start_ea + seg.size()))  
 	return segs
 
 def in_seg(val, segname, segs):
@@ -74,70 +76,70 @@ class VirtualInhAnalysis:
 
 		for i in range(get_func_qty()):
 			func = getn_func(i)
-			#validFunctions.append(func.startEA)
-			for ea in range(func.startEA, func.endEA):
+			#validFunctions.append(func.start_ea)
+			for ea in range(func.start_ea, func.end_ea):
 				if "throw info for" in GetDisasm(ea) or "struct" in GetDisasm(ea):
 					continue
-				flags = get_flags_novalue(ea)
-				if isHead(flags) and isCode(flags):
-					if decode_insn(ea) == 0:
+				flags = get_flags(ea)
+				if is_head(flags) and is_code(flags):
+					if decode_insn(mycmd, ea) == 0:
 						continue
-					# if func.startEA == 0x73D6C:
-					# 	print format(func.startEA, 'x'), "got to immediates"
+					# if func.start_ea == 0x73D6C:
+					# 	print format(func.start_ea, 'x'), "got to immediates"
 					for j in range(6):
-						if cmd.Operands[j].type == o_imm and (cmd.itype == NN_mov or cmd.itype == NN_lea):
-							imm_val = cmd.Operands[j].value
+						if mycmd.ops[j].type == o_imm and (mycmd.itype == NN_mov or mycmd.itype == NN_lea):
+							imm_val = mycmd.ops[j].value
 							if in_seg(imm_val, 'rodata', self.segs):
 								potentials.add(imm_val)
-								self.immediates_n_address.add((imm_val, ea, func.startEA))
-						elif cmd.Operands[j].type == o_mem and (cmd.itype == NN_mov or cmd.itype == NN_lea):
-							# if func.startEA == 0x73D6C:
-							# 	print format(func.startEA, 'x'), "got to o_mem"
-							imm_val = cmd.Operands[j].addr
+								self.immediates_n_address.add((imm_val, ea, func.start_ea))
+						elif mycmd.ops[j].type == o_mem and (mycmd.itype == NN_mov or mycmd.itype == NN_lea):
+							# if func.start_ea == 0x73D6C:
+							# 	print format(func.start_ea, 'x'), "got to o_mem"
+							imm_val = mycmd.ops[j].addr
 							# if ea == 0xA0362:
 							#     print "found2", in_seg(imm_val, 'got')
 							if in_seg(imm_val, 'got', self.segs):
 								imm_val = self.get_got_entry(imm_val)
 							if in_seg(imm_val, 'rodata', self.segs):
 								potentials.add(imm_val)
-								self.immediates_n_address.add((imm_val, ea, func.startEA))
-					if cmd.itype == NN_call or cmd.itype == NN_jmp:
-						if not func.startEA in self.call_instrns:
-							self.call_instrns[func.startEA] = []
-						self.call_instrns[func.startEA].append((ea, cmd.Operands[0].addr))
+								self.immediates_n_address.add((imm_val, ea, func.start_ea))
+					if mycmd.itype == NN_call or mycmd.itype == NN_jmp:
+						if not func.start_ea in self.call_instrns:
+							self.call_instrns[func.start_ea] = []
+						self.call_instrns[func.start_ea].append((ea, mycmd.ops[0].addr))
 			if func.tailqty > 0:
 				fti = func_tail_iterator_t(func)
 				ok = fti.first()
 				while ok:
 					ar = fti.chunk()
-					for ea in range(ar.startEA, ar.endEA):
+					for ea in range(ar.start_ea, ar.end_ea):
 						if "throw info for" in GetDisasm(ea) or "struct" in GetDisasm(ea):
 							continue
-						flags = get_flags_novalue(ea)
-						if isHead(flags) and isCode(flags):
-							if decode_insn(ea) == 0:
+						flags = get_flags(ea)
+						if is_head(flags) and is_code(flags):
+							if decode_insn(mycmd, ea) == 0:
 								continue
 
 							for j in range(6):
-								if cmd.Operands[j].type == o_imm and (cmd.itype == NN_mov or cmd.itype == NN_lea):
-									imm_val = cmd.Operands[j].value
+								if mycmd.ops[j].type == o_imm and (mycmd.itype == NN_mov or mycmd.itype == NN_lea):
+									imm_val = mycmd.ops[j].value
 									if in_seg(imm_val, 'rodata', self.segs):
 										potentials.add(imm_val)
-										self.immediates_n_address.add((imm_val, ea, func.startEA))
-								elif cmd.Operands[j].type == o_mem and (cmd.itype == NN_mov or cmd.itype == NN_lea):
-									imm_val = cmd.Operands[j].addr
+										self.immediates_n_address.add((imm_val, ea, func.start_ea))
+								elif mycmd.ops[j].type == o_mem and (mycmd.itype == NN_mov or mycmd.itype == NN_lea):
+									imm_val = mycmd.ops[j].addr
 									#if ea == 107972:
 										#print format(imm_val,'x')
 									if in_seg(imm_val, 'got', self.segs):
 										imm_val = self.get_got_entry(imm_val)
 									if in_seg(imm_val, 'rodata', self.segs):
 										potentials.add(imm_val)
-										self.immediates_n_address.add((imm_val, ea, func.startEA))
-							if cmd.itype == NN_call or cmd.itype == NN_jmp:
-								if not func.startEA in self.call_instrns:
-									self.call_instrns[func.startEA] = []
-								self.call_instrns[func.startEA].append((ea, cmd.Operands[0].addr))
-					ok = fti.next()
+										self.immediates_n_address.add((imm_val, ea, func.start_ea))
+							if mycmd.itype == NN_call or mycmd.itype == NN_jmp:
+								if not func.start_ea in self.call_instrns:
+									self.call_instrns[func.start_ea] = []
+								self.call_instrns[func.start_ea].append((ea, mycmd.ops[0].addr))
+					ok = next(fti)
 
 		return potentials
 
@@ -157,8 +159,8 @@ class VirtualInhAnalysis:
 				self.pure_virtual = addr
 			return True
 		else:
-			decode_insn(addr)
-			next_addr = cmd.Operands[0].addr
+			decode_insn(mycmd, addr)
+			next_addr = mycmd.ops[0].addr
 			if in_seg(next_addr, 'got_plt', self.segs):
 				if get_func_name(self.get_dword(next_addr)) == "_purecall":
 					if self.pure_virtual == 0:
@@ -177,9 +179,9 @@ class VirtualInhAnalysis:
 
 	def get_dword(self, ea):
 		if ea <= 0xffffffff:
-			return Dword(ea)
+			return get_dword(ea)
 		else:
-			return Qword(ea)
+			return get_qword(ea)
 
 
 	def verifyVTables(self):
@@ -197,7 +199,7 @@ class VirtualInhAnalysis:
 		for (pv, ea, func) in self.immediates_n_address:
 			#print format(pv, 'x'), format(ea, 'x'), format(func, 'x')
 			if func == 0x140006DA0:
-				print format(pv, 'x'), format(ea, 'x'), format(func, 'x')
+				print(format(pv, 'x'), format(ea, 'x'), format(func, 'x'))
 			self.verifyAVtable(pv, ea, func)
 			self.verifyAVBTable(pv, ea, func)
 
@@ -205,7 +207,7 @@ class VirtualInhAnalysis:
 		# 	for f in vtables[v]['vfptrs']:
 		# 		f_ptr = get_func(f)
 		# 		if not f_ptr is None:
-		# 			if get_func(f).startEA == f:
+		# 			if get_func(f).start_ea == f:
 		# 				vfns[f] = True
 		return
 
@@ -255,16 +257,16 @@ class VirtualInhAnalysis:
 		#if get_dword(imm) != 0xfffffffc: return # this looks like a signature for VBTables, just an assumption for now
 		#take "0xffffffa8" as input, it determines the offset added to rcx before calling virtual base
 		#offset_added = vbaseoffset+(0xffffffff-0xffffffa8)+1
-		# if (Dword(imm) != vbase_base 
-		# 	and Dword(imm) != 0 
-		# 	and Dword(imm) != vbase_base2 
-		# 	and Dword(imm) != vbase_base3 
-		# 	and Dword(imm) != vbase_base4
-		# 	and Dword(imm) != vbase_base5
-		# 	and Dword(imm) != vbase_base6): return
+		# if (get_dword(imm) != vbase_base 
+		# 	and get_dword(imm) != 0 
+		# 	and get_dword(imm) != vbase_base2 
+		# 	and get_dword(imm) != vbase_base3 
+		# 	and get_dword(imm) != vbase_base4
+		# 	and get_dword(imm) != vbase_base5
+		# 	and get_dword(imm) != vbase_base6): return
 		found = False
 		for i in self.vbase_magics:
-			if Dword(imm) == i:
+			if get_dword(imm) == i:
 				found = True
 				break
 		if not found: return
@@ -274,13 +276,13 @@ class VirtualInhAnalysis:
 		entries = []
 		vals = imm + 4
 		while True:
-			if Dword(vals) >= 0 and Dword(vals) < 0x4096: 
-				entries.append(Dword(vals))
+			if get_dword(vals) >= 0 and get_dword(vals) < 0x4096: 
+				entries.append(get_dword(vals))
 				vals += 4
 			else:
 				break
 		if func == 0x140006DA0:
-			print len(entries)
+			print(len(entries))
 		if len(entries) > 0:
 			self.vbtables[imm] = entries
 			if not func in self.func_that_initialize_vbtable:
@@ -292,70 +294,70 @@ class VirtualInhAnalysis:
 	def getAddedOffset(self, addr):
 		i = 0
 		while i <= 15:
-			decode_insn(addr)
-			#if cmd.itype == 6 and cmd.Operands[0].reg == 1 and cmd.Operands[1].type == o_imm: #sink is ecx
-			if cmd.itype == 6 and cmd.Operands[1].type == o_imm: #sink is ecx
-				return cmd.Operands[1].value
-			addr = PrevHead(addr)
+			decode_insn(mycmd, addr)
+			#if mycmd.itype == 6 and mycmd.ops[0].reg == 1 and mycmd.ops[1].type == o_imm: #sink is ecx
+			if mycmd.itype == 6 and mycmd.ops[1].type == o_imm: #sink is ecx
+				return mycmd.ops[1].value
+			addr = idc.prev_head(addr)
 			i += 1
 			#else:
 		return -1
 
 	def getMovAddedOffset(self, addr):
-		decode_insn(addr)
-		if cmd.itype == 122 and cmd.Operands[0].type == 4 and cmd.Operands[1].type == o_reg:
-			return cmd.Operands[0].addr
+		decode_insn(mycmd, addr)
+		if mycmd.itype == 122 and mycmd.ops[0].type == 4 and mycmd.ops[1].type == o_reg:
+			return mycmd.ops[0].addr
 		return -1
 
 	def processInlinedCtorsDtors(self, addr):
 		init_addr = addr
-		decode_insn(addr)
-		sink = cmd.Operands[0].reg #get rax in 1 above
+		decode_insn(mycmd, addr)
+		sink = mycmd.ops[0].reg #get rax in 1 above
 		i = 0
 		x = -1
 		while i < 5: #try to find instn 2 above
-			addr = NextHead(addr)
-			decode_insn(addr)
+			addr = idc.next_head(addr)
+			decode_insn(mycmd, addr)
 			#reg 0 = rcx
 			if init_addr == 0x14072490D:
-				print cmd.Operands[0].type, o_displ, cmd.Operands[1].reg, sink, cmd.Operands[0].reg, format(cmd.Operands[0].addr, 'x')
-			if (cmd.Operands[0].type == o_displ or cmd.Operands[0].type == o_phrase) and cmd.Operands[1].reg == sink:
-				x = cmd.Operands[0].addr
+				print(mycmd.ops[0].type, o_displ, mycmd.ops[1].reg, sink, mycmd.ops[0].reg, format(mycmd.ops[0].addr, 'x'))
+			if (mycmd.ops[0].type == o_displ or mycmd.ops[0].type == o_phrase) and mycmd.ops[1].reg == sink:
+				x = mycmd.ops[0].addr
 				break
 			i += 1
 		if init_addr == 0x14072490D:
-			print "x is ", format(x, 'x') 
+			print("x is ", format(x, 'x')) 
 		if x == -1 : return -1
 		i = 0
 		vptr = -1
 		while i < 10: #try to get instn 3 above
-			addr = NextHead(addr)
-			decode_insn(addr)
+			addr = idc.next_head(addr)
+			decode_insn(mycmd, addr)
 			# if init_addr == 0x140640DE2:
-			# 	print cmd.Operands[0].type, o_reg, cmd.Operands[1].type, o_mem, format(cmd.Operands[1].value, 'x'), cmd.Operands[1].value in vtables 
-			if cmd.Operands[0].type == o_reg and cmd.Operands[1].type == o_imm and cmd.Operands[1].value in vtables:
-				vptr = cmd.Operands[1].value
-				sink = cmd.Operands[0].reg
+			# 	print mycmd.ops[0].type, o_reg, mycmd.ops[1].type, o_mem, format(mycmd.ops[1].value, 'x'), mycmd.ops[1].value in vtables 
+			if mycmd.ops[0].type == o_reg and mycmd.ops[1].type == o_imm and mycmd.ops[1].value in self.vtables:
+				vptr = mycmd.ops[1].value
+				sink = mycmd.ops[0].reg
 				break
-			if cmd.Operands[0].type == o_reg and cmd.Operands[1].type == o_mem and cmd.Operands[1].addr in vtables:
-				vptr = cmd.Operands[1].addr
-				sink = cmd.Operands[0].reg
+			if mycmd.ops[0].type == o_reg and mycmd.ops[1].type == o_mem and mycmd.ops[1].addr in self.vtables:
+				vptr = mycmd.ops[1].addr
+				sink = mycmd.ops[0].reg
 				break
 			i += 1
 		if init_addr == 0x14072490D:
-			print "vptr is ", format(vptr, 'x')
+			print("vptr is ", format(vptr, 'x'))
 		if vptr == -1: return -1
 		i = 0
 		v = -1
 		while i < 5: #try to get instn 4 above
-			addr = NextHead(addr)
-			decode_insn(addr)
-			if cmd.Operands[0].type == o_displ and cmd.Operands[1].type == o_reg and cmd.Operands[1].reg == sink:
-				v = cmd.Operands[0].addr
+			addr = idc.next_head(addr)
+			decode_insn(mycmd, addr)
+			if mycmd.ops[0].type == o_displ and mycmd.ops[1].type == o_reg and mycmd.ops[1].reg == sink:
+				v = mycmd.ops[0].addr
 				break
 			i += 1
 		if init_addr == 0x14072490D:
-			print "v is ", format(v, 'x')
+			print("v is ", format(v, 'x'))
 		if v == -1: return -1
 		return (v-x, vptr)
 
@@ -369,9 +371,9 @@ class VirtualInhAnalysis:
 				vbtables_initialized_addr = sorted(self.func_that_initialize_vbtable_addr[c])
 				if c in self.call_instrns:
 					for (ea, target) in self.call_instrns[c]:
-						offset_added = self.getAddedOffset(PrevHead(ea))
+						offset_added = self.getAddedOffset(idc.prev_head(ea))
 						if offset_added != -1:
-							mov_offset_added = self.getMovAddedOffset(NextHead(vbtables_initialized_addr[0]))
+							mov_offset_added = self.getMovAddedOffset(idc.next_head(vbtables_initialized_addr[0]))
 		
 							found = False
 							for i in self.vbase_magics:
@@ -399,11 +401,11 @@ class VirtualInhAnalysis:
 def main():
 
 	vt_inh = VirtualInhAnalysis(buildsegmap())
-	print "VBTables"
+	print("VBTables")
 	for v in vt_inh.vbtables:
-		print format(v, 'x')
+		print(format(v, 'x'))
 
-	print "Ctor/Dtor of Derived [Ctor/Dtor of Virtual Bases]"
+	print("Ctor/Dtor of Derived [Ctor/Dtor of Virtual Bases]")
 	len1 = 0
 	leng1 = 0
 	for vb in vt_inh.VBases:
@@ -411,11 +413,11 @@ def main():
 			len1 += 1
 		elif len(vt_inh.VBases[vb]) > 1:
 			leng1 += 1
-		print format(vb, 'x'), [format(x, 'x') for x in vt_inh.VBases[vb]]
-	print "# classes with one or more Virtual Bases: ",len(vt_inh.VBases)
-	print "# classes with Virtual Bases = 1: ", len1
-	print "# classes with Virtual Bases: ", leng1
-	print "# of VTables: ", len(vt_inh.vtables)
+		print(format(vb, 'x'), [format(x, 'x') for x in vt_inh.VBases[vb]])
+	print("# classes with one or more Virtual Bases: ",len(vt_inh.VBases))
+	print("# classes with Virtual Bases = 1: ", len1)
+	print("# classes with Virtual Bases: ", leng1)
+	print("# of VTables: ", len(vt_inh.vtables))
 
 if __name__ == "__main__":
 	main()
