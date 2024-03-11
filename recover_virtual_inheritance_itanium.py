@@ -146,7 +146,7 @@ class VTablesAnalysis:
 										self.potentials.add(imm_val)
 										self.immediates_n_address.append((imm_val, 'i', ea))
 
-					ok = fti.next()
+					ok = next(fti)
 
 		#return potentials
 
@@ -173,7 +173,7 @@ class VTablesAnalysis:
 			new_addr = v + poss_offset_added
 			if in_seg(Dword(new_addr), 'text', self.segs) or self.pure_v(Dword(new_addr)) or in_seg(Dword(new_addr-DWORD_SIZE), 'rodata', self.segs):
 				return (True, new_addr)
-		if not type(Dword(v + DWORD_SIZE)) in {int, long} :
+		if not type(Dword(v + DWORD_SIZE)) in {int, int} :
 			return (False, 0)
 		if ((Dword(v - DWORD_SIZE) == 0 or in_seg(Dword(v - DWORD_SIZE), 'rodata', self.segs)) and Dword(v - DWORD_SIZE*2) == 0 and 
 				((get_func_name(Dword(v)) == "__cxa_pure_virtual") or in_seg(Dword(v), 'code', self.segs))):
@@ -290,7 +290,7 @@ class VTablesAnalysis:
 
 	def remove_VTTs_identified_as_VTables(self):
 	    #global vtables, vfns
-	    for v in self.vtables.keys():
+	    for v in list(self.vtables.keys()):
 	        for f in self.vtables[v]['vfptrs']:
 	            if f in self.vtables and not in_seg(f, "extern", self.segs):
 	                del self.vtables[v]
@@ -411,12 +411,12 @@ class CtorDtorAnalysis:
 	                            if not func.startEA in self.call_instns:
 	                                self.call_instns[func.startEA] = []
 	                            self.call_instns[func.startEA].append((ea, cmd.Operands[0].addr))
-	                ok = fti.next()
+	                ok = next(fti)
 
 	def assign_vptr_to_ctor_dtor(self):
 	    #global ctor_dtors, ctor_dtor_vt, func_vt, vptr_writes
 
-	    for f,v in self.ctor_dtors.items():
+	    for f,v in list(self.ctor_dtors.items()):
 	        is_set = 0
 	        if f in self.vptr_writes:
 	            ea = 0
@@ -934,9 +934,9 @@ def main():
     print('Derived class [Virtual Bases] [Intermediate Bases]')
     for d in vi_obj.distinctVBases:
         if d in vi_obj.intermediate_bases:
-            print format(d, 'x'), [format(b, 'x') for b in vi_obj.distinctVBases[d]], [format(i, 'x') for i in vi_obj.intermediate_bases[d]]
+            print(format(d, 'x'), [format(b, 'x') for b in vi_obj.distinctVBases[d]], [format(i, 'x') for i in vi_obj.intermediate_bases[d]])
         else: 
-            print format(d, 'x'), [format(b, 'x') for b in vi_obj.distinctVBases[d]]
+            print(format(d, 'x'), [format(b, 'x') for b in vi_obj.distinctVBases[d]])
 
 if __name__ == "__main__":
 	main()
