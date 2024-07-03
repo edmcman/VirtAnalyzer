@@ -387,7 +387,8 @@ class VirtualInhAnalysis:
 								if not c in self.VBases:
 									self.VBases[c] = []
 
-								self.VBases[c].append(vbtables_initialized_addr[0])
+								if target not in self.VBases[c]:
+									self.VBases[c].append(target)
 
 				ret = self.processInlinedCtorsDtors(vbtables_initialized_addr[0])
 				if ret != -1:
