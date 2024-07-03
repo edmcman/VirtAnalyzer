@@ -1,6 +1,7 @@
 import idc
 from idaapi import *
 from ida_ua import insn_t
+from ida_name import demangle_name
 
 DWORD_SIZE = 8
 
@@ -414,7 +415,16 @@ def main():
 			len1 += 1
 		elif len(vt_inh.VBases[vb]) > 1:
 			leng1 += 1
-		print(format(vb, 'x'), [format(x, 'x') for x in vt_inh.VBases[vb]])
+
+		def get_name(addr):
+			n = get_func_name(addr)
+			if n is None: return hex(addr)
+			demangled = demangle_name(n, get_inf_attr(INF_SHORT_DN))
+			if demangled is not None: return demangled
+			return n
+
+		print(get_name(vb), [get_name(x) for x in vt_inh.VBases[vb]])
+		
 	print("# classes with one or more Virtual Bases: ",len(vt_inh.VBases))
 	print("# classes with Virtual Bases = 1: ", len1)
 	print("# classes with Virtual Bases: ", leng1)
