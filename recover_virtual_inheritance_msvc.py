@@ -424,7 +424,7 @@ def main():
 			return n
 
 		print(get_name(vb), [get_name(x) for x in vt_inh.VBases[vb]])
-		
+
 	print("# classes with one or more Virtual Bases: ",len(vt_inh.VBases))
 	print("# classes with Virtual Bases = 1: ", len1)
 	print("# classes with Virtual Bases: ", leng1)
