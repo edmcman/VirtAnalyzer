@@ -1,0 +1,2 @@
+Ctor/Dtor of Derived [Ctor/Dtor of Virtual Bases]
+C3::C3(void) ['C1::C1(void)', 'C3::C3(void)']
