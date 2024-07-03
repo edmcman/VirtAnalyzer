@@ -1,3 +1,11 @@
 Ctor/Dtor of Derived [Ctor/Dtor of Virtual Bases]
 C1::C1(special_constructor) ['C2::C2(void)']
 C1::C1(void) ['C0::C0(void)', 'C2::C2(void)']
+
+actual:
+struct C1 : public virtual C0 {
+/* method id 401 */ virtual ~C1 ();
+/* method id 402 */ C1 ();
+C1 (special_constructor);
+C2 v0;
+};
